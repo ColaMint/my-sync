@@ -111,7 +111,7 @@ class GuaziThread(threading.Thread):
         self.end_page = end_page
 
     def log(self, msg):
-        sys.stdout.write(u"%s%s\n" % (u"[线程#%s]" % self.id, msg))
+        sys.stdout.write((u"%s%s\n" % (u"[线程#%s]" % self.id, msg)).encode('utf-8'))
 
     def run(self):
         self.log(u"抓取的页数范围: %s~%s" % (self.start_page, self.end_page))
