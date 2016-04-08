@@ -13,13 +13,9 @@ import time
 import openpyxl
 from lxml import html
 
-parser = argparse.ArgumentParser(description='抓取人人网信息')
-parser.add_argument('-s', type=int, required=True, dest='start_page',
-                    help='开始抓取的页数(从 1 开始)')
-parser.add_argument('-e', type=int, required=True, dest='end_page',
-                    help='结束抓取的页数')
+parser = argparse.ArgumentParser(description=u'抓取人人网信息')
 parser.add_argument('-c', type=int, required=True, dest='thread_count',
-                    help='运行的线程数目')
+                    help=u'运行的线程数目')
 parser.add_argument(
     '-t',
     required=False,
@@ -63,10 +59,10 @@ def save_tmp_data_to_excel(file_path):
     ws = wb.active
     ws.cell(row=1, column=1, value=u'检查对象')
     ws.cell(row=1, column=2, value=u'检查时间')
-    ws.cell(row=1, column=3, value=u'检测城市')
+    ws.cell(row=1, column=3, value=u'检测省份')
     ws.cell(row=1, column=4, value=u'上牌城市')
     ws.cell(row=1, column=5, value=u'上牌时间')
-    ws.cell(row=1, column=6, value=u'检测城市')
+    ws.cell(row=1, column=6, value=u'检测省份')
     ws.cell(row=1, column=7, value=u'公里数')
     ws.cell(row=1, column=8, value=u'车价')
     ws.cell(row=1, column=9, value=u'URL')
@@ -94,28 +90,23 @@ def signal_handler(file_path, signal, frame):
     sys.exit(-1)
 
 
-class GuaziThread(threading.Thread):
+class RenRenThread(threading.Thread):
 
     id = None
     """
     该线程的编号
     """
 
-    start_page = None
+    provinces = None
     """
-    该线程开始抓取的页数
+    该线程负责抓取的省份:w
+
     """
 
-    end_page = None
-    """
-    该线程结束抓取的页数
-    """
-
-    def __init__(self, id, start_page, end_page):
-        super(GuaziThread, self).__init__()
+    def __init__(self, id, provinces):
+        super(RenRenThread, self).__init__()
         self.id = id
-        self.start_page = start_page
-        self.end_page = end_page
+        self.provinces = provinces
 
     def log(self, msg):
         sys.stdout.write(
@@ -125,25 +116,37 @@ class GuaziThread(threading.Thread):
               msg)).encode('utf-8'))
 
     def run(self):
-        self.log(u"抓取的页数范围: %s~%s" % (self.start_page, self.end_page))
-        for page in range(self.start_page, self.end_page + 1):
-            self.fetch_page(page)
+        self.log(u"负责抓取的省份: %s" % ', '.join(self.provinces))
+        for province in self.provinces:
+            self.fetch_province(province)
 
-    def fetch_page(self, page):
-        self.log(u"开始抓取第%s页..." % (page,))
+    def fetch_province(self, province):
+        self.log(u"开始抓取%s..." % province)
+        page = 1
+        while True:
+            result = self.fetch_page(province, page)
+            page += 1
+            if not result:
+                break
+
+    def fetch_page(self, province, page):
+        self.log(u"开始抓取%s第%s页..." % (province, page))
+        url = 'https://www.renrenche.com/%s/ershouche/p%s' % (province, page)
         try_times = 3
         while try_times > 0:
             try_times -= 1
-            r = requests.get(
-                'https://www.renrenche.com/cn/ershouche/p%s' %
-                page)
+            r = requests.get(url)
             if r.status_code == 200:
                 doc = html.fromstring(r.content.decode('utf-8'))
                 elements = doc.cssselect('#search_list_wrapper li a')
-                for element in elements:
-                    href = element.get('href')
-                    self.fetch_car(href)
-                break
+                if elements:
+                    for element in elements:
+                        href = element.get('href')
+                        self.fetch_car(href)
+                    return True
+                else:
+                    return False
+        return False
 
     def fetch_car(self, href):
         global tmp_data
@@ -157,13 +160,20 @@ class GuaziThread(threading.Thread):
                     r = requests.get(url)
                     if r.status_code == 200:
                         doc = html.fromstring(r.content.decode('utf-8'))
-                        jian_ce_dui_xiang = doc.cssselect('#basic > div.container.detail-title-wrapper > div > div.title')[0].text
-                        jian_ce_shi_jian = doc.cssselect('#report > div > div > p > span.span4.offset5')[0].text[5:]
-                        jian_ce_cheng_shi = doc.cssselect('#report > div > div > p > span:nth-child(2)')[0].text[5:]
-                        shang_pai_cheng_shi = doc.cssselect('#report > div > div > div.row.card-table > div > table > tr:nth-child(2) > td:nth-child(2)')[0].text
-                        shang_pai_shi_jian = doc.cssselect('#basic > div.detail-box-wrapper > div > div > div.detail-box > ul.row-fluid.list-unstyled.box-list-primary > li:nth-child(1) > p > strong')[0].text
-                        gong_li_shu = doc.cssselect('#basic > div.detail-box-wrapper > div > div > div.detail-box > ul.row-fluid.list-unstyled.box-list-primary > li:nth-child(2) > p > strong')[0].text
-                        che_jia = doc.cssselect('#basic > div.detail-box-wrapper > div > div > div.detail-box > p.box-price')[0].text[1:]
+                        jian_ce_dui_xiang = doc.cssselect(
+                            '#basic > div.container.detail-title-wrapper > div > div.title')[0].text
+                        jian_ce_shi_jian = doc.cssselect(
+                            '#report > div > div > p > span.span4.offset5')[0].text[5:]
+                        jian_ce_cheng_shi = doc.cssselect(
+                            '#report > div > div > p > span:nth-child(2)')[0].text[5:]
+                        shang_pai_cheng_shi = doc.cssselect(
+                            '#report > div > div > div.row.card-table > div > table > tr:nth-child(2) > td:nth-child(2)')[0].text
+                        shang_pai_shi_jian = doc.cssselect(
+                            '#basic > div.detail-box-wrapper > div > div > div.detail-box > ul.row-fluid.list-unstyled.box-list-primary > li:nth-child(1) > p > strong')[0].text
+                        gong_li_shu = doc.cssselect(
+                            '#basic > div.detail-box-wrapper > div > div > div.detail-box > ul.row-fluid.list-unstyled.box-list-primary > li:nth-child(2) > p > strong')[0].text
+                        che_jia = doc.cssselect(
+                            '#basic > div.detail-box-wrapper > div > div > div.detail-box > p.box-price')[0].text[1:]
 
                         tmp_data[href] = {
                             'url': url,
@@ -176,7 +186,7 @@ class GuaziThread(threading.Thread):
                             'che_jia': che_jia
                         }
                         self.log(
-                            u'检查对象: %s 检查时间: %s 检测城市: %s 上牌城市: %s 上牌时间: %s 公里数: %s 车价: %s' %
+                            u'检查对象: %s 检查时间: %s 检测省份: %s 上牌城市: %s 上牌时间: %s 公里数: %s 车价: %s' %
                             (jian_ce_dui_xiang,
                                 jian_ce_shi_jian,
                                 jian_ce_cheng_shi,
@@ -192,8 +202,6 @@ class GuaziThread(threading.Thread):
 def main():
     # 解析命令行参数
     args = parser.parse_args()
-    start_page = args.start_page
-    end_page = args.end_page
     thread_count = args.thread_count
     tmp_file = args.tmp_file
     output_file = args.output_file
@@ -204,19 +212,23 @@ def main():
     # 注册信号处理函数
     signal.signal(signal.SIGINT, partial(signal_handler, tmp_file))
 
-    # 计算各个线程负责的页码，初始化线程组
-    pages = range(start_page, end_page + 1)
-    page_size = len(pages)
-    chunk_size = (page_size + thread_count - 1) / thread_count
+    # 计算各个线程负责的省份，初始化线程组
+    provinces = ['bj', 'sjz', 'tj', 'cc', 'dl', 'hrb', 'sy', 'hf', 'hz', 'jn',
+              'nj', 'qd', 'sh', 'suz', 'wf', 'wx', 'xz', 'changde', 'xiangtan',
+              'zhuzhou', 'cs', 'luoyang', 'ny', 'wh', 'yc', 'zz', 'dg', 'fs',
+              'fz', 'gz', 'huizhou', 'nn', 'sz', 'xm', 'zq', 'cd', 'cq', 'km',
+              'my', 'xa', 'gy', 'baoji']
+    province_size = len(provinces)
+    chunk_size = (province_size + thread_count - 1) / thread_count
     threads = []
     for i in range(thread_count):
-        t_start_page = i * chunk_size
-        t_end_page = (i + 1) * chunk_size - 1
-        if t_start_page >= page_size:
+        start_index = i * chunk_size
+        end_index = (i + 1) * chunk_size - 1
+        if start_index >= province_size:
             break
-        if t_end_page >= page_size:
-            t_end_page = page_size - 1
-        threads.append(GuaziThread(i + 1, t_start_page, t_end_page))
+        if end_index >= province_size:
+            end_index = province_size - 1
+        threads.append(RenRenThread(i + 1, provinces[start_index:end_index+1]))
 
     # 启动所有线程
     for t in threads:
