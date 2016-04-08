@@ -2,7 +2,6 @@
 # -*- coding:utf-8 -*-
 
 from functools import partial
-from bs4 import BeautifulSoup
 import argparse
 import signal
 import json
@@ -12,18 +11,23 @@ import requests
 import threading
 import time
 import openpyxl
+from lxml import html
 
-parser = argparse.ArgumentParser(description='抓取瓜子网信息')
+parser = argparse.ArgumentParser(description='抓取人人网信息')
 parser.add_argument('-s', type=int, required=True, dest='start_page',
-                    help='开始抓取的页数(从 0 开始)')
+                    help='开始抓取的页数(从 1 开始)')
 parser.add_argument('-e', type=int, required=True, dest='end_page',
                     help='结束抓取的页数')
 parser.add_argument('-c', type=int, required=True, dest='thread_count',
                     help='运行的线程数目')
-parser.add_argument('-t', required=False, dest='tmp_file', default='./tmp_data',
-                    help='临时数据文件路径')
+parser.add_argument(
+    '-t',
+    required=False,
+    dest='tmp_file',
+    default='./renren.json',
+     help='临时数据文件路径')
 parser.add_argument('-o', required=False, dest='output_file',
-                    default='./output.xlsx', help='保存的excel文件路径')
+                    default='./renren.xlsx', help='保存的excel文件路径')
 
 tmp_data = None
 
@@ -35,7 +39,7 @@ def load_tmp_data_from_file(file_path):
     global tmp_data
     if os.path.exists(file_path):
         with open(file_path, 'r') as f:
-            tmp_data = json.loads(f.readline())
+            tmp_data = json.loads(f.read())
     if not tmp_data:
         tmp_data = {}
 
@@ -59,21 +63,24 @@ def save_tmp_data_to_excel(file_path):
     ws = wb.active
     ws.cell(row=1, column=1, value=u'检查对象')
     ws.cell(row=1, column=2, value=u'检查时间')
-    ws.cell(row=1, column=3, value=u'上牌城市')
-    ws.cell(row=1, column=4, value=u'上牌时间')
-    ws.cell(row=1, column=5, value=u'公里数')
-    ws.cell(row=1, column=6, value=u'车价')
-    ws.cell(row=1, column=7, value=u'URL')
+    ws.cell(row=1, column=3, value=u'检测城市')
+    ws.cell(row=1, column=4, value=u'上牌城市')
+    ws.cell(row=1, column=5, value=u'上牌时间')
+    ws.cell(row=1, column=6, value=u'检测城市')
+    ws.cell(row=1, column=7, value=u'公里数')
+    ws.cell(row=1, column=8, value=u'车价')
+    ws.cell(row=1, column=9, value=u'URL')
 
     row = 2
     for _, d in tmp_data.iteritems():
         ws.cell(row=row, column=1, value=d['jian_ce_dui_xiang'])
         ws.cell(row=row, column=2, value=d['jian_ce_shi_jian'])
-        ws.cell(row=row, column=3, value=d['shang_pai_cheng_shi'])
-        ws.cell(row=row, column=4, value=d['shang_pai_shi_jian'])
-        ws.cell(row=row, column=5, value=d['gong_li_shu'])
-        ws.cell(row=row, column=6, value=d['che_jia'])
-        ws.cell(row=row, column=7, value=d['url'])
+        ws.cell(row=row, column=3, value=d['jian_ce_cheng_shi'])
+        ws.cell(row=row, column=4, value=d['shang_pai_cheng_shi'])
+        ws.cell(row=row, column=5, value=d['shang_pai_shi_jian'])
+        ws.cell(row=row, column=6, value=d['gong_li_shu'])
+        ws.cell(row=row, column=7, value=d['che_jia'])
+        ws.cell(row=row, column=8, value=d['url'])
         row += 1
 
     wb.save(file_path)
@@ -111,7 +118,11 @@ class GuaziThread(threading.Thread):
         self.end_page = end_page
 
     def log(self, msg):
-        sys.stdout.write((u"%s%s\n" % (u"[线程#%s]" % self.id, msg)).encode('utf-8'))
+        sys.stdout.write(
+            (u"%s%s\n" %
+             (u"[线程#%s]" %
+              self.id,
+              msg)).encode('utf-8'))
 
     def run(self):
         self.log(u"抓取的页数范围: %s~%s" % (self.start_page, self.end_page))
@@ -123,13 +134,14 @@ class GuaziThread(threading.Thread):
         try_times = 3
         while try_times > 0:
             try_times -= 1
-            r = requests.get('http://www.guazi.com/www/buy/o%s' % page)
+            r = requests.get(
+                'https://www.renrenche.com/cn/ershouche/p%s' %
+                page)
             if r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                elements = soup.select('.list-infoBox')
+                doc = html.fromstring(r.content.decode('utf-8'))
+                elements = doc.cssselect('#search_list_wrapper li a')
                 for element in elements:
-                    a = (element.find_all('a'))[0]
-                    href = a['href']
+                    href = element.get('href')
                     self.fetch_car(href)
                 break
 
@@ -141,42 +153,37 @@ class GuaziThread(threading.Thread):
                 try_times = 3
                 while try_times > 0:
                     try_times -= 1
-                    url = 'http://www.guazi.com%s' % href
-                    r = requests.get('http://www.guazi.com%s' % href)
+                    url = 'https://www.renrenche.com%s' % href
+                    r = requests.get(url)
                     if r.status_code == 200:
-                        soup = BeautifulSoup(r.text, 'html.parser')
-                        jian_ce_dui_xiang = soup.select(
-                            '.dt-titletype')[0].string.strip()
-                        jian_ce_shi_jian = soup.select('#report')[0].find_all('span')[
-                                                    0].string[5:].strip()
-                        shang_pai_cheng_shi = soup.select('.assort')[0].select('li')[
-                                                        4].select('b')[0].string.strip()
-                        shang_pai_shi_jian = soup.select('.assort')[0].select('li')[
-                                                        0].select('b')[0].string.strip()
-                        gong_li_shu = soup.select('.assort')[0].select(
-                            'li')[1].select('b')[0].string.strip()
-                        che_jia = u''
-                        for s in soup.select('.pricebox')[0].select(
-                                '.pricestype')[0].strings:
-                            che_jia += unicode(s)
-                        che_jia = che_jia[1:].strip()
+                        doc = html.fromstring(r.content.decode('utf-8'))
+                        jian_ce_dui_xiang = doc.cssselect('#basic > div.container.detail-title-wrapper > div > div.title')[0].text
+                        jian_ce_shi_jian = doc.cssselect('#report > div > div > p > span.span4.offset5')[0].text[5:]
+                        jian_ce_cheng_shi = doc.cssselect('#report > div > div > p > span:nth-child(2)')[0].text[5:]
+                        shang_pai_cheng_shi = doc.cssselect('#report > div > div > div.row.card-table > div > table > tr:nth-child(2) > td:nth-child(2)')[0].text
+                        shang_pai_shi_jian = doc.cssselect('#basic > div.detail-box-wrapper > div > div > div.detail-box > ul.row-fluid.list-unstyled.box-list-primary > li:nth-child(1) > p > strong')[0].text
+                        gong_li_shu = doc.cssselect('#basic > div.detail-box-wrapper > div > div > div.detail-box > ul.row-fluid.list-unstyled.box-list-primary > li:nth-child(2) > p > strong')[0].text
+                        che_jia = doc.cssselect('#basic > div.detail-box-wrapper > div > div > div.detail-box > p.box-price')[0].text[1:]
+
                         tmp_data[href] = {
                             'url': url,
                             'jian_ce_dui_xiang': jian_ce_dui_xiang,
                             'jian_ce_shi_jian': jian_ce_shi_jian,
+                            'jian_ce_cheng_shi': jian_ce_cheng_shi,
                             'shang_pai_cheng_shi': shang_pai_cheng_shi,
                             'shang_pai_shi_jian': shang_pai_shi_jian,
                             'gong_li_shu': gong_li_shu,
                             'che_jia': che_jia
                         }
                         self.log(
-                            u'检查对象: %s 检查时间: %s 上牌城市: %s 上牌时间: %s 公里数: %s 车价: %s' %
+                            u'检查对象: %s 检查时间: %s 检测城市: %s 上牌城市: %s 上牌时间: %s 公里数: %s 车价: %s' %
                             (jian_ce_dui_xiang,
-                            jian_ce_shi_jian,
-                            shang_pai_cheng_shi,
-                            shang_pai_shi_jian,
-                            gong_li_shu,
-                            che_jia))
+                                jian_ce_shi_jian,
+                                jian_ce_cheng_shi,
+                                shang_pai_cheng_shi,
+                                shang_pai_shi_jian,
+                                gong_li_shu,
+                                che_jia))
                         break
             except Exception as e:
                 print e
