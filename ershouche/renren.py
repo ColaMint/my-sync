@@ -60,13 +60,12 @@ def save_tmp_data_to_excel(file_path):
     ws = wb.active
     ws.cell(row=1, column=1, value=u'检查对象')
     ws.cell(row=1, column=2, value=u'检查时间')
-    ws.cell(row=1, column=3, value=u'检测省份')
+    ws.cell(row=1, column=3, value=u'检测城市')
     ws.cell(row=1, column=4, value=u'上牌城市')
     ws.cell(row=1, column=5, value=u'上牌时间')
-    ws.cell(row=1, column=6, value=u'检测省份')
-    ws.cell(row=1, column=7, value=u'公里数')
-    ws.cell(row=1, column=8, value=u'车价')
-    ws.cell(row=1, column=9, value=u'URL')
+    ws.cell(row=1, column=6, value=u'公里数')
+    ws.cell(row=1, column=7, value=u'车价')
+    ws.cell(row=1, column=8, value=u'URL')
 
     row = 2
     for _, d in tmp_data.iteritems():
@@ -98,16 +97,16 @@ class RenRenThread(threading.Thread):
     该线程的编号
     """
 
-    provinces = None
+    cities = None
     """
-    该线程负责抓取的省份:w
+    该线程负责抓取的城市:
 
     """
 
-    def __init__(self, id, provinces):
+    def __init__(self, id, cities):
         super(RenRenThread, self).__init__()
         self.id = id
-        self.provinces = provinces
+        self.cities = cities
 
     def log(self, msg):
         sys.stdout.write(
@@ -117,22 +116,22 @@ class RenRenThread(threading.Thread):
               msg)).encode('utf-8'))
 
     def run(self):
-        self.log(u"负责抓取的省份: %s" % ', '.join(self.provinces))
-        for province in self.provinces:
-            self.fetch_province(province)
+        self.log(u"负责抓取的城市: %s" % ', '.join(self.cities))
+        for city in self.cities:
+            self.fetch_city(city)
 
-    def fetch_province(self, province):
-        self.log(u"开始抓取%s..." % province)
+    def fetch_city(self, city):
+        self.log(u"开始抓取%s..." % city)
         page = 1
         while True:
-            result = self.fetch_page(province, page)
+            result = self.fetch_page(city, page)
             page += 1
             if not result:
                 break
 
-    def fetch_page(self, province, page):
-        self.log(u"开始抓取%s第%s页..." % (province, page))
-        url = 'https://www.renrenche.com/%s/ershouche/p%s' % (province, page)
+    def fetch_page(self, city, page):
+        self.log(u"开始抓取%s第%s页..." % (city, page))
+        url = 'https://www.renrenche.com/%s/ershouche/p%s' % (city, page)
         try_times = 3
         while try_times > 0:
             try_times -= 1
@@ -152,7 +151,8 @@ class RenRenThread(threading.Thread):
     def fetch_car(self, href):
         global tmp_data
 
-        if href not in tmp_data:
+        car_id = href.split('/')[-1]
+        if car_id not in tmp_data:
             try:
                 try_times = 3
                 while try_times > 0:
@@ -176,7 +176,7 @@ class RenRenThread(threading.Thread):
                         che_jia = doc.cssselect(
                             '#basic > div.detail-box-wrapper > div > div > div.detail-box > p.box-price')[0].text[1:]
 
-                        tmp_data[href] = {
+                        tmp_data[car_id] = {
                             'url': url,
                             'jian_ce_dui_xiang': jian_ce_dui_xiang,
                             'jian_ce_shi_jian': jian_ce_shi_jian,
@@ -187,7 +187,7 @@ class RenRenThread(threading.Thread):
                             'che_jia': che_jia
                         }
                         self.log(
-                            u'检查对象: %s 检查时间: %s 检测省份: %s 上牌城市: %s 上牌时间: %s 公里数: %s 车价: %s' %
+                            u'检查对象: %s 检查时间: %s 检测城市: %s 上牌城市: %s 上牌时间: %s 公里数: %s 车价: %s' %
                             (jian_ce_dui_xiang,
                                 jian_ce_shi_jian,
                                 jian_ce_cheng_shi,
@@ -213,23 +213,23 @@ def main():
     # 注册信号处理函数
     signal.signal(signal.SIGINT, partial(signal_handler, tmp_file))
 
-    # 计算各个线程负责的省份，初始化线程组
-    provinces = ['bj', 'sjz', 'tj', 'cc', 'dl', 'hrb', 'sy', 'hf', 'hz', 'jn',
+    # 计算各个线程负责的城市，初始化线程组
+    cities = ['bj', 'sjz', 'tj', 'cc', 'dl', 'hrb', 'sy', 'hf', 'hz', 'jn',
               'nj', 'qd', 'sh', 'suz', 'wf', 'wx', 'xz', 'changde', 'xiangtan',
               'zhuzhou', 'cs', 'luoyang', 'ny', 'wh', 'yc', 'zz', 'dg', 'fs',
               'fz', 'gz', 'huizhou', 'nn', 'sz', 'xm', 'zq', 'cd', 'cq', 'km',
               'my', 'xa', 'gy', 'baoji']
-    province_size = len(provinces)
-    chunk_size = (province_size + thread_count - 1) / thread_count
+    city_size = len(cities)
+    chunk_size = (city_size + thread_count - 1) / thread_count
     threads = []
     for i in range(thread_count):
         start_index = i * chunk_size
         end_index = (i + 1) * chunk_size - 1
-        if start_index >= province_size:
+        if start_index >= city_size:
             break
-        if end_index >= province_size:
-            end_index = province_size - 1
-        threads.append(RenRenThread(i + 1, provinces[start_index:end_index+1]))
+        if end_index >= city_size:
+            end_index = city_size - 1
+        threads.append(RenRenThread(i + 1, cities[start_index:end_index+1]))
 
     # 启动所有线程
     for t in threads:
