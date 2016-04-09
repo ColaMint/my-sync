@@ -12,10 +12,11 @@ import threading
 import time
 import openpyxl
 from lxml import html
+requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
-parser = argparse.ArgumentParser(description=u'抓取人人网信息')
+parser = argparse.ArgumentParser(description='抓取人人网信息')
 parser.add_argument('-c', type=int, required=True, dest='thread_count',
-                    help=u'运行的线程数目')
+                    help='运行的线程数目')
 parser.add_argument(
     '-t',
     required=False,
@@ -135,7 +136,7 @@ class RenRenThread(threading.Thread):
         try_times = 3
         while try_times > 0:
             try_times -= 1
-            r = requests.get(url)
+            r = requests.get(url, verify=False)
             if r.status_code == 200:
                 doc = html.fromstring(r.content.decode('utf-8'))
                 elements = doc.cssselect('#search_list_wrapper li a')
@@ -157,7 +158,7 @@ class RenRenThread(threading.Thread):
                 while try_times > 0:
                     try_times -= 1
                     url = 'https://www.renrenche.com%s' % href
-                    r = requests.get(url)
+                    r = requests.get(url, verify=False)
                     if r.status_code == 200:
                         doc = html.fromstring(r.content.decode('utf-8'))
                         jian_ce_dui_xiang = doc.cssselect(

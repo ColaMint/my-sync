@@ -13,17 +13,17 @@ import time
 import openpyxl
 from lxml import html
 
-parser = argparse.ArgumentParser(description=u'抓取瓜子网信息')
+parser = argparse.ArgumentParser(description='抓取瓜子网信息')
 parser.add_argument('-s', type=int, required=True, dest='start_page',
-                    help=u'开始抓取的页数(从 0 开始)')
+                    help='开始抓取的页数(从 0 开始)')
 parser.add_argument('-e', type=int, required=True, dest='end_page',
-                    help=u'结束抓取的页数')
+                    help='结束抓取的页数')
 parser.add_argument('-c', type=int, required=True, dest='thread_count',
-                    help=u'运行的线程数目')
+                    help='运行的线程数目')
 parser.add_argument('-t', required=False, dest='tmp_file', default='./guazi.json',
-                    help=u'临时数据文件路径')
+                    help='临时数据文件路径')
 parser.add_argument('-o', required=False, dest='output_file',
-                    default='./guazi.xlsx', help=u'保存的excel文件路径')
+                    default='./guazi.xlsx', help='保存的excel文件路径')
 
 tmp_data = None
 
