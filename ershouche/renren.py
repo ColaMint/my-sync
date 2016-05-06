@@ -99,8 +99,7 @@ class RenRenThread(threading.Thread):
 
     cities = None
     """
-    该线程负责抓取的城市:
-
+    该线程负责抓取的城市
     """
 
     def __init__(self, id, cities):
@@ -213,12 +212,20 @@ def main():
     # 注册信号处理函数
     signal.signal(signal.SIGINT, partial(signal_handler, tmp_file))
 
+    # 获取所有城市
+    cities = []
+    url = 'http://www.renrenche.com'
+    r = requests.get(url)
+    if r.status_code == 200:
+        doc = html.fromstring(r.content.decode('utf-8'))
+        elements = doc.cssselect(
+            '#cities > div > div.area-city > div > a')
+        for e in elements:
+            cities.append(e.get('rrc-event-name'))
+    else:
+        return
+
     # 计算各个线程负责的城市，初始化线程组
-    cities = ['bj', 'sjz', 'tj', 'cc', 'dl', 'hrb', 'sy', 'hf', 'hz', 'jn',
-              'nj', 'qd', 'sh', 'suz', 'wf', 'wx', 'xz', 'changde', 'xiangtan',
-              'zhuzhou', 'cs', 'luoyang', 'ny', 'wh', 'yc', 'zz', 'dg', 'fs',
-              'fz', 'gz', 'huizhou', 'nn', 'sz', 'xm', 'zq', 'cd', 'cq', 'km',
-              'my', 'xa', 'gy', 'baoji']
     city_size = len(cities)
     chunk_size = (city_size + thread_count - 1) / thread_count
     threads = []
