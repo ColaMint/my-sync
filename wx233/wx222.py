@@ -124,7 +124,6 @@ class WorkerThread(threading.Thread):
         papers = {}
         for p in range(200):
             purl = url + 'p=%s' % p
-            purl = 'http://wx.233.com/tiku/exam/635-0-0-0-0-0p=19'
             self.log(u'获取试卷: %s' % purl)
             body = self.get(purl)
             doc = html.fromstring(body)
