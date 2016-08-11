@@ -8,6 +8,7 @@ import requests
 import threading
 import time
 import re
+import traceback
 from lxml import html
 from Queue import Queue
 
@@ -98,11 +99,12 @@ class WorkerThread(threading.Thread):
                 self.log(u"负责抓取 class_id: %s, cert: %s" % (task.class_id, task.cert))
                 self.do_task(task)
             except Exception as e:
-                print e
+                self.log(e.message)
+                traceback.print_exc()
+
         self.log(u"退出")
 
     def do_task(self, task):
-        global data
         data['task.class_id'] = {}
         data['task.class_id']['cert'] = task.cert
         # 所有试卷
@@ -122,6 +124,7 @@ class WorkerThread(threading.Thread):
         papers = {}
         for p in range(200):
             purl = url + 'p=%s' % p
+            purl = 'http://wx.233.com/tiku/exam/635-0-0-0-0-0p=19'
             self.log(u'获取试卷: %s' % purl)
             body = self.get(purl)
             doc = html.fromstring(body)
@@ -129,7 +132,10 @@ class WorkerThread(threading.Thread):
             if lis is None:
                 break
             for li in lis:
-                a = li.cssselect('div > h3 > a')[0]
+                a = li.cssselect('div > h3 > a')
+                if len(a) == 0:
+                    break
+                a = a[0]
                 span = li.cssselect('div > p > span:nth-child(1)')[0]
 
                 paper_name = a.text.strip()
