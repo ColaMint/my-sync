@@ -295,7 +295,7 @@ def main():
     session.cookies = cookies
 
     # 获取职位列表
-    url = 'http://wx.233.com/uc/class'
+    url = 'http://wx.233.com/uc/class/all'
     r = session.get(url)
     if r.status_code != 200:
         return
