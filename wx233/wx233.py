@@ -137,8 +137,14 @@ class WorkerThread(threading.Thread):
         # 获取总页数
         body = self.get(url)
         doc = html.fromstring(body)
-        b = doc.cssselect('#pageBar > div > span > b')[0].text
-        page_cnt = int(re.search(u'第 .*\/(.*) 页', b).group(1))
+        page_cnt = 0
+        b = doc.cssselect('#pageBar > div > span > b')
+
+        if len(b) == 1:
+            page_cnt = int(re.search(u'第 .*\/(.*) 页', b[0].text).group(1))
+
+        if page_cnt == 0:
+            return papers
 
         for p in range(page_cnt):
             purl = url + 'p=%s' % (p + 1)
