@@ -252,7 +252,10 @@ class WorkerThread(threading.Thread):
         # 生成练习
         start_url = 'http://wx.233.com/tiku/chapter/getChapterQuestion?chapterId=%s&questionFilter=do&questionType=-1&questionYear=-1&questionNum=%s&interfaceAction=fast&_=%s' % (id, exam_num, int(time.time() * 1000))
         body = self.get(start_url)
-        log_id = json.loads(body)['list']['logId']
+        response = json.loads(body)
+        if len(response['list']) == 0:
+            return questions
+        log_id = response['list']['logId']
 
         # 暂停练习
         pause_url = 'http://wx.233.com/tiku/exam/pauseExercise?typeId=%s&pauseType=1&fromType=2&_=%s' % (log_id, int(time.time() * 1000))
