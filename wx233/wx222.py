@@ -71,6 +71,7 @@ class WorkerThread(threading.Thread):
 
     def get(self, url, try_times=3):
         global session
+        self.log(url)
         while try_times > 0:
             try_times -= 1
             try:
@@ -82,6 +83,7 @@ class WorkerThread(threading.Thread):
 
     def post(self, url, data, try_times=3):
         global session
+        self.log(url)
         while try_times > 0:
             try_times -= 1
             try:
@@ -186,6 +188,8 @@ class WorkerThread(threading.Thread):
                         paper['an_li_fen_xi_ti'].append(self.parse_question(q))
 
                 papers[paper_id] = paper
+                if len(paper['dan_xiang_xuan_ze_ti']) == 0 and len(paper['duo_xiang_xuan_ze_ti']) == 0 and len(paper['an_li_fen_xi_ti']) == 0:
+                    self.log(u'no questions: %s' % paper_id)
 
         return papers
 
