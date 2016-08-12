@@ -226,14 +226,12 @@ class WorkerThread(threading.Thread):
                 if pid == 0:
                     # 大章
                     chapter_name = tr.cssselect('a')[0].text.strip()
-                    self.log(u'%s %s' % (subject, chapter_name))
                     chapter_questions = self.fetch_chapter_or_section_questions(chapter_id, exam_num) if exam_num > 0 else []
                     chapters[chapter_id]= {'chapter_id': chapter_id, 'chapter_name': chapter_name, 'chapter_questions': chapter_questions, 'sections': []}
                     self.log(u'科目: %s 大章: %s题 题数: %s' % (subject, chapter_name, len(chapter_questions)))
                 else:
                     # 小节
                     section_name = tr.cssselect('a')[0].text.strip()
-                    self.log(u'%s %s' % (subject, section_name))
                     section_questions = self.fetch_chapter_or_section_questions(chapter_id, exam_num) if exam_num > 0 else []
                     section = {
                         'section_id': chapter_id,
