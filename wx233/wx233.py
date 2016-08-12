@@ -123,7 +123,7 @@ class WorkerThread(threading.Thread):
         data['subjects'] = subjects
 
         # 保存数据到文件
-        filename = os.path.join(directory, '%s.json' % task.cert)
+        filename = os.path.join(directory, '%s.json' % task.cert.encode('utf-8'))
         with open(filename, 'w') as f:
             f.write(json.dumps(data))
 
