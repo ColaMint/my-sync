@@ -139,7 +139,7 @@ class WorkerThread(threading.Thread):
             body = self.get(purl)
             doc = html.fromstring(body)
             lis = doc.cssselect('body > div.le-pracon > div.le-pracleft > div.le-prabg.pracl-dalist > ul > li')
-            if lis is None:
+            if len(lis) == 0:
                 break
             for li in lis:
                 a = li.cssselect('div > h3 > a')
