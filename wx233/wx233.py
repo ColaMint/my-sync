@@ -77,7 +77,7 @@ class WorkerThread(threading.Thread):
             try_times -= 1
             try:
                 r = session.get(url)
-                return r.content
+                return r.content.decode('utf-8')
             except Exception:
                 pass
         return None
@@ -89,7 +89,7 @@ class WorkerThread(threading.Thread):
             try_times -= 1
             try:
                 r = session.post(url, data=data)
-                return r.content
+                return r.content.decode('utf-8')
             except Exception:
                 pass
         return None
