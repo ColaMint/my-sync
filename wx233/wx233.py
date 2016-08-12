@@ -133,8 +133,15 @@ class WorkerThread(threading.Thread):
         获取试卷
         """
         papers = {}
-        for p in range(200):
-            purl = url + 'p=%s' % p
+
+        # 获取总页数
+        body = self.get(url)
+        doc = html.fromstring(body)
+        b = doc.cssselect('#pageBar > div > span > b')[0].text
+        page_cnt = int(re.search(u'第 .*\/(.*) 页', b).group(1))
+
+        for p in range(page_cnt):
+            purl = url + 'p=%s' % (p + 1)
             self.log(u'获取试卷: %s' % purl)
             body = self.get(purl)
             doc = html.fromstring(body)
@@ -300,7 +307,7 @@ def main():
     if r.status_code != 200:
         return
     doc = html.fromstring(r.content.decode('utf-8'))
-    elements = doc.cssselect('[data-classid]')
+    elements = doc.cssselect('dd [data-classid]')
     for e in elements:
         class_id = e.get('data-classid')
         cert = e.text
