@@ -139,6 +139,8 @@ class WorkerThread(threading.Thread):
         """
         获取试卷
         """
+        self.log(u'获取试卷: %s' % url)
+
         papers = {}
 
         # 获取总页数
