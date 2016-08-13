@@ -109,12 +109,11 @@ class WorkerThread(threading.Thread):
 
     def do_task(self, task):
         global directory
-        directory = directory.encode('utf-8')
-        filename = os.path.join(directory, u'%s.json' % task.cert)
+        filename = os.path.join(directory, '%s.json' % task.cert.encode('utf-8'))
 
         # 数据文件存在，直接跳过
         if os.path.exists(filename):
-            self.log(u'%s 已存在' % filename)
+            self.log(u'%s 已存在' % filename.decode('utf-8'))
             return
 
         data = {}
