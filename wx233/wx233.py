@@ -256,7 +256,11 @@ class WorkerThread(threading.Thread):
         # 生成练习
         start_url = 'http://wx.233.com/tiku/chapter/getChapterQuestion?chapterId=%s&questionFilter=do&questionType=-1&questionYear=-1&questionNum=%s&interfaceAction=fast&_=%s' % (id, exam_num, int(time.time() * 1000))
         body = self.get(start_url)
-        response = json.loads(body)
+        try:
+            response = json.loads(body)
+        except Exception:
+            self.log(u'JSON 无法解析: %s' % body)
+            return []
         if len(response['list']) == 0:
             return []
         log_id = response['list']['logId']
