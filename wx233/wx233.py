@@ -99,7 +99,7 @@ class WorkerThread(threading.Thread):
         while not task_queue.empty():
             try:
                 task = task_queue.get_nowait()
-                self.log(u"负责抓取 class_id: %s, cert: %s" % (task.class_id, task.cert))
+                self.log(u"负责抓取 %s" % task.cert)
                 self.do_task(task)
             except Exception as e:
                 self.log(e.message)
@@ -109,9 +109,17 @@ class WorkerThread(threading.Thread):
 
     def do_task(self, task):
         global directory
+        directory = directory.encode('utf-8')
+        filename = os.path.join(directory, u'%s.json' % task.cert)
+
+        # 数据文件存在，直接跳过
+        if os.path.exists(filename):
+            self.log(u'%s 已存在' % filename)
+            return
 
         data = {}
         data['cert'] = task.cert
+
         # 所有试卷
         papers_url = 'http://wx.233.com/tiku/exam/%s-0-0-0-0-0' % task.class_id
         papers = self.fetch_papers(papers_url)
@@ -123,10 +131,8 @@ class WorkerThread(threading.Thread):
         data['subjects'] = subjects
 
         # 保存数据到文件
-        filename = os.path.join(directory, '%s.json' % task.cert.encode('utf-8'))
         with open(filename, 'w') as f:
             f.write(json.dumps(data))
-
 
     def fetch_papers(self, url):
         """
@@ -148,7 +154,6 @@ class WorkerThread(threading.Thread):
 
         for p in range(page_cnt):
             purl = url + 'p=%s' % (p + 1)
-            self.log(u'获取试卷: %s' % purl)
             body = self.get(purl)
             doc = html.fromstring(body)
             lis = doc.cssselect('body > div.le-pracon > div.le-pracleft > div.le-prabg.pracl-dalist > ul > li')
@@ -188,10 +193,7 @@ class WorkerThread(threading.Thread):
                 # 获取习题和答案
                 for rule_id in rule_ids:
                     answer_url = 'http://wx.233.com/tiku/exam/getNewsList?paperId=%s&rulesId=%s&_=%s' % (paper_id, rule_id, int(time.time() * 1000))
-                    body = self.get(answer_url)
-                    questions = json.loads(body)['list']['questions']
-                    for q in questions:
-                        paper['questions'].append(self.parse_question(q))
+                    paper['questions'] = self.parse_questions(answer_url)
 
                 papers[paper_id] = paper
                 self.log(u'试卷: %s 题数: %s' % (paper_name, len(paper['questions'])))
@@ -248,13 +250,12 @@ class WorkerThread(threading.Thread):
         return subjects
 
     def fetch_chapter_or_section_questions(self, id, exam_num):
-        questions = []
         # 生成练习
         start_url = 'http://wx.233.com/tiku/chapter/getChapterQuestion?chapterId=%s&questionFilter=do&questionType=-1&questionYear=-1&questionNum=%s&interfaceAction=fast&_=%s' % (id, exam_num, int(time.time() * 1000))
         body = self.get(start_url)
         response = json.loads(body)
         if len(response['list']) == 0:
-            return questions
+            return []
         log_id = response['list']['logId']
 
         # 暂停练习
@@ -263,21 +264,26 @@ class WorkerThread(threading.Thread):
 
         # 获取练习和答案
         exam_url = 'http://wx.233.com/tiku/exam/getExerciseNewsList?typeId=%s&fromType=2&completedTf=1&_=%s' % (log_id, int(time.time() * 1000))
-        body = self.get(exam_url)
-        for q in json.loads(body)['list']['questions']:
-            questions.append(self.parse_question(q))
+        return self.parse_questions(exam_url)
 
+    def parse_questions(self, url):
+        questions = []
+        try:
+            body = self.get(url)
+            for q in json.loads(body)['list']['questions']:
+                question = {
+                    'exam_id': q['examId'],
+                    'exam_type': q['examType'],
+                    'question': q['question'],
+                    'option_list': q['optionList'],
+                    'answer': q['answer'],
+                    'analysis': q['analysis'],
+                }
+                questions.append(question)
+        except Exception as e:
+            self.log(e.message)
+            traceback.print_exc()
         return questions
-
-    def parse_question(self, q):
-        return {
-            'exam_id': q['examId'],
-            'exam_type': q['examType'],
-            'question': q['question'],
-            'option_list': q['optionList'],
-            'answer': q['answer'],
-            'analysis': q['analysis'],
-        }
 
 def parse_cookie(cookie):
     cookies = {}
