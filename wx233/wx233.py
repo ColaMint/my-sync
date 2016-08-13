@@ -194,7 +194,7 @@ class WorkerThread(threading.Thread):
                 # 获取习题和答案
                 for rule_id in rule_ids:
                     answer_url = 'http://wx.233.com/tiku/exam/getNewsList?paperId=%s&rulesId=%s&_=%s' % (paper_id, rule_id, int(time.time() * 1000))
-                    paper['questions'] = self.parse_questions(answer_url)
+                    paper['questions'].extend(self.parse_questions(answer_url))
 
                 papers[paper_id] = paper
                 self.log(u'试卷: %s 题数: %s' % (paper_name, len(paper['questions'])))
