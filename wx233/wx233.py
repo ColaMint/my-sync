@@ -113,8 +113,10 @@ class WorkerThread(threading.Thread):
 
         # 数据文件存在，直接跳过
         if os.path.exists(filename):
-            self.log(u'%s 已存在' % filename.decode('utf-8'))
-            return
+            size = os.path.getsize(filename)
+            if size > 1024:
+                self.log(u'%s 已存在, 且大于1KB, 略过' % filename.decode('utf-8'))
+                return
 
         data = {}
         data['cert'] = task.cert
