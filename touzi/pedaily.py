@@ -1,7 +1,7 @@
 #!/usr/bin/python
-# -*- coding:utf-8 -*-
+# -*- coding:gb2312 -*-
 
-import argparse
+import os
 import json
 import sys
 import requests
@@ -12,35 +12,23 @@ import Queue
 import traceback
 from lxml import html
 
-parser = argparse.ArgumentParser(description=u'投资界')
-parser.add_argument(
-    u'-c',
-    type=int,
-    required=True,
-    dest=u'thread_count',
-    help=u'运行的线程数目')
-parser.add_argument(
-    u'-o',
-    required=False,
-    dest=u'output_file',
-    default=u'./pedaily.xlsx',
-    help=u'保存的excel文件路径')
-
 data = {}
 session = requests.Session()
 task_queue = Queue.Queue()
+last_max_id = None
 max_page = None
 
 def get(url, try_times=3):
     global session
+    e = None
     while try_times > 0:
         try_times -= 1
         try:
-            r = session.get(url)
-            return r.content.decode('utf-8')
-        except Exception:
-            pass
-    return None
+            r = session.get(url, timeout=30)
+            return r.content.decode('gb2312')
+        except Exception as e1:
+            e = e1
+    raise e
 
 def get_doc(url, try_times=3):
     content = get(url, try_times)
@@ -81,6 +69,24 @@ def save_data_to_excel(data, filename):
 
     wb.save(filename)
 
+def read_last_max_id(filename):
+    """
+    读取上一次爬取的最大ID
+    """
+    if os.path.isfile(filename):
+        with open(filename, u'r') as f:
+            for line in f:
+                return int(line)
+
+    return None
+
+def write_last_max_id(filename, last_max_id):
+    """
+    保存此次爬取的最大ID
+    """
+    with open(filename, u'w') as f:
+        f.write(str(last_max_id))
+
 class Task(object):
 
     page = None
@@ -114,7 +120,7 @@ class WorkerThread(threading.Thread):
 
     def log(self, msg):
         sys.stdout.write(
-            (u"[线程#%s]%s\n" % (self.id, msg)).encode('utf-8'))
+            (u"[线程#%s]%s\n" % (self.id, msg)).encode('gb2312'))
 
     def run(self):
         global task_queue
@@ -122,7 +128,7 @@ class WorkerThread(threading.Thread):
         while not task_queue.empty():
             try:
                 task = task_queue.get_nowait()
-                if task.page > max_page:
+                if max_page and task.page > max_page:
                     break
                 self.log(u"负责抓取第%d页" % task.page)
                 self.do_task(task)
@@ -137,8 +143,6 @@ class WorkerThread(threading.Thread):
         global max_page
         url = u'http://zdb.pedaily.cn/inv/%d/' % task.page
         doc = get_doc(url)
-        if doc is None:
-            raise Exception(u'failed to get %s' % url)
 
         data[task.page] = []
         trs = doc.cssselect(u'body > div.content > div > div.box-fix-c > div.box.box-content > table > tr')[1:]
@@ -147,40 +151,65 @@ class WorkerThread(threading.Thread):
 
         for tr in trs:
             detail_url = u'http://zdb.pedaily.cn' + tr.cssselect(u'td.td6 > a')[0].get('href')
+            cur_id = detail_url.split(u'/')[-2][4:]
+            cur_id = int(cur_id)
+            if last_max_id and cur_id <= last_max_id:
+                max_page = task.page
+                break
+
             doc = get_doc(detail_url)
             if doc is None:
                 self.log(u'failed to get detail: %s' % detail_url)
                 continue
 
             entry = {
-                u'投资时间':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > p:nth-child(1)')[0].text_content()[5:],
-                u'投资方':      doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > p:nth-child(2)')[0].text_content()[6:],
-                u'受资方':      doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > p:nth-child(3)')[0].text_content()[6:],
-                u'轮次':        doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > p:nth-child(4)')[0].text_content()[5:],
-                u'行业分类':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > p:nth-child(5) > a:nth-child(2)')[0].text_content(),
-                u'金额':        doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > p:nth-child(6)')[0].text_content()[5:],
+                u'id':          cur_id,
+                u'投资时间':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(1)')[0].text_content()[5:],
+                u'投资方':      doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(2)')[0].text_content()[6:],
+                u'受资方':      doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(3)')[0].text_content()[6:],
+                u'轮次':        doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(4)')[0].text_content()[5:],
+                u'行业分类':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(5) > a:nth-child(2)')[0].text_content(),
+                u'金额':        doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(6)')[0].text_content()[5:],
                 u'URL':         detail_url,
-                u'案例介绍':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > p:nth-child(8)')[0].text_content(),
+                u'案例介绍':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(8)')[0].text_content().strip(),
             }
             data[task.page].append(entry)
         self.log(u'第%d页 %d条记录' % (task.page, len(data[task.page])))
 
 def main():
-    # 解析命令行参数
-    args = parser.parse_args()
-    thread_count = args.thread_count
-    output_file = args.output_file
-
     #  全局变量
     global data
     global task_queue
     global max_page
+    global last_max_id
+
+    # 临时变量
+    last_max_id_file = u'./pedaily.last_max_id.txt'
+
+    # 交互式输入参数
+    input_thread_count = raw_input(u'请输入线程数目(建议20~50):'.encode(u'gb2312'))
+    thread_count = int(input_thread_count)
+    if thread_count <= 0:
+        print u'线程数目必须大于0'.encode(u'gb2312')
+        return
+
+    input_whether_to_read_last_max_id = raw_input(u'是否只爬取未爬过的新记录(y/n):'.encode(u'gb2312'))
+    if input_whether_to_read_last_max_id != 'y' and input_whether_to_read_last_max_id != 'n':
+        print u'必须输入 y 或 n '.encode(u'gb2312')
+        return
+
+    if input_whether_to_read_last_max_id == 'y':
+        last_max_id = read_last_max_id(last_max_id_file)
+        if last_max_id:
+            print (u'此次不爬取 id <= %d 的记录' % last_max_id).encode(u'gb2312')
+        else:
+            print u'找不到上次爬取的记录，此次将爬取全部记录'.encode(u'gb2312')
 
     # 获取总页数，填充任务队列
     url = u'http://zdb.pedaily.cn/inv/'
     doc = get_doc(url)
     if doc is None:
-        raise Exception(u'无法访问: %s' % url)
+        raise Exception((u'无法访问: %s' % url).encode('gb2312'))
     a = doc.cssselect('body > div.content > div > div.box-fix-c > div.box.box-content > div.box-page > div > a')[-2]
     total_page = int(a.text)
     max_page = total_page
@@ -198,8 +227,18 @@ def main():
     while threading.activeCount() > 1:
         time.sleep(1)
 
-    # 保存数据到excel
-    save_data_to_excel(data, output_file)
+    # 保存数据
+    cur_max_id = None
+    if 1 in data and len(data[1]) > 0:
+        cur_max_id = data[1][0][u'id']
+        write_last_max_id(last_max_id_file, cur_max_id)
+
+    if cur_max_id:
+        output_file = u'./pedaily-%s.xlsx' % cur_max_id
+        save_data_to_excel(data, output_file)
+        print (u'数据保存在%s' % os.path.abspath(output_file)).encode('gb2312')
+    else:
+        print u'未爬取到任何数据'.encode(u'gb2312')
 
 if __name__ == '__main__':
     main()

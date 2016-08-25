@@ -1,7 +1,7 @@
 #!/usr/bin/python
-# -*- coding:utf-8 -*-
+# -*- coding:gb2312 -*-
 
-import argparse
+import os
 import json
 import sys
 import requests
@@ -13,35 +13,24 @@ import traceback
 import re
 from lxml import html
 
-parser = argparse.ArgumentParser(description=u'IT桔子')
-parser.add_argument(
-    u'-c',
-    type=int,
-    required=True,
-    dest=u'thread_count',
-    help=u'运行的线程数目')
-parser.add_argument(
-    u'-o',
-    required=False,
-    dest=u'output_file',
-    default=u'./itjuzi.xlsx',
-    help=u'保存的excel文件路径')
-
 data = {}
 headers = {u'User-Agent': u'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36'}
 session = requests.Session()
 task_queue = Queue.Queue()
+last_max_id = None
+max_page = None
 
 def get(url, try_times=3):
     global session
+    e = None
     while try_times > 0:
         try_times -= 1
         try:
-            r = session.get(url, headers=headers)
-            return r.content.decode('utf-8')
-        except Exception:
-            pass
-    return None
+            r = session.get(url, headers=headers, timeout=30)
+            return r.content.decode('gb2312')
+        except Exception as e1:
+            e = e1
+    raise e
 
 def get_doc(url, try_times=3):
     content = get(url, try_times)
@@ -59,11 +48,16 @@ def save_data_to_excel(data, filename):
     columns = [
         u'时间',
         u'公司',
-        u'行业',
-        u'地区',
+        u'一级行业',
+        u'二级行业',
+        u'一级地区',
+        u'二级地区',
         u'轮次',
-        u'融资额',
+        u'融资金额',
+        u'股权占比',
         u'投资方',
+        u'公司简介',
+        u'URL',
     ]
     columns_cnt = len(columns)
     wb = openpyxl.Workbook()
@@ -80,6 +74,24 @@ def save_data_to_excel(data, filename):
                 ws.cell(row=row, column=i+1, value=entry[columns[i]])
 
     wb.save(filename)
+
+def read_last_max_id(filename):
+    """
+    读取上一次爬取的最大ID
+    """
+    if os.path.isfile(filename):
+        with open(filename, u'r') as f:
+            for line in f:
+                return int(line)
+
+    return None
+
+def write_last_max_id(filename, last_max_id):
+    """
+    保存此次爬取的最大ID
+    """
+    with open(filename, u'w') as f:
+        f.write(str(last_max_id))
 
 class Task(object):
 
@@ -104,13 +116,16 @@ class WorkerThread(threading.Thread):
 
     def log(self, msg):
         sys.stdout.write(
-            (u"[线程#%s]%s\n" % (self.id, msg)).encode('utf-8'))
+            (u"[线程#%s]%s\n" % (self.id, msg)).encode('gb2312'))
 
     def run(self):
         global task_queue
+        global max_page
         while not task_queue.empty():
             try:
                 task = task_queue.get_nowait()
+                if max_page and task.page > max_page:
+                    break
                 self.log(u"负责抓取第%d页" % task.page)
                 self.do_task(task)
             except Exception as e:
@@ -121,43 +136,77 @@ class WorkerThread(threading.Thread):
 
     def do_task(self, task):
         global data
+        global max_page
+        global last_max_id
+
         url = u'https://www.itjuzi.com/investevents?page=%d' % task.page
         doc = get_doc(url)
-        if doc is None:
-            raise Exception(u'failed to get %s' % url)
 
         data[task.page] = []
         lis = doc.cssselect(u'body > div.thewrap > div:nth-child(3) > div.main > div:nth-child(3) > div > div:nth-child(1) > ul:nth-child(2) > li')
+
         for li in lis:
+            cur_id = li.cssselect(u'p.title > a')[0].get(u'href').strip().split(u'/')[-1]
+            cur_id = int(cur_id)
+            if last_max_id and cur_id <= last_max_id:
+                max_page = task.page
+                break
+
+            detail_url = li.cssselect(u'p.title > a')[0].get('href')
+            doc = get_doc(detail_url)
+            region = re.search(u'([^\s]*)\s*·\s*([^\s]*)', doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > span:nth-child(7)')[0].text_content().strip())
             entry = {
-                u'时间':    li.cssselect(u'i')[0].cssselect(u'span')[0].text_content().strip(),
-                u'公司':    li.cssselect(u'p.title > a > span')[0].text_content().strip(),
-                u'行业':    li.cssselect(u'span.tags > a')[0].text_content().strip(),
-                u'地区':    li.cssselect(u'span.loca > a')[0].text_content().strip(),
-                u'轮次':    li.cssselect(u'i')[3].cssselect(u'span')[0].text_content().strip(),
-                u'融资额':  li.cssselect(u'i')[4].text_content().strip(),
-                u'投资方':  re.sub(u'\s+', u' / ', li.cssselect(u'i')[5].cssselect(u'span')[0].text_content().strip()),
+                u'id':          cur_id,
+                u'时间':        li.cssselect(u'i')[0].cssselect(u'span')[0].text_content().strip(),
+                u'公司':        li.cssselect(u'p.title > a > span')[0].text_content().strip(),
+                u'一级行业':    doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > a:nth-child(3)')[0].text_content().strip(),
+                u'二级行业':    doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > span:nth-child(5)')[0].text_content().strip(),
+                u'一级地区':    region.group(1),
+                u'二级地区':    region.group(2),
+                u'轮次':        li.cssselect(u'i')[3].cssselect(u'span')[0].text_content().strip(),
+                u'融资金额':    li.cssselect(u'i')[4].text_content().strip(),
+                u'股权占比':    doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(5) > span.per')[0].text_content().strip(),
+                u'投资方':      re.sub(u'\s+', u' / ', li.cssselect(u'i')[5].cssselect(u'span')[0].text_content().strip()),
+                u'公司简介':    doc.cssselect(u'body > div.thewrap > div.boxed > div.main > div:nth-child(1) > div > div.block > div:nth-child(3) > p')[0].text_content().strip(),
+                u'URL':         li.cssselect(u'p.title > a')[0].get(u'href'),
             }
-            print entry
             data[task.page].append(entry)
         self.log(u'第%d页 %d条记录' % (task.page, len(data[task.page])))
 
 def main():
-    # 解析命令行参数
-    args = parser.parse_args()
-    thread_count = args.thread_count
-    output_file = args.output_file
-
     #  全局变量
     global data
     global task_queue
+    global last_max_id
+
+    # 临时变量
+    last_max_id_file = u'./itjuzi.last_max_id.txt'
+
+    # 交互式输入参数
+    input_thread_count = raw_input(u'请输入线程数目(建议20~50):'.encode(u'gb2312'))
+    thread_count = int(input_thread_count)
+    if thread_count <= 0:
+        print u'线程数目必须大于0'.encode(u'gb2312')
+        return
+
+    input_whether_to_read_last_max_id = raw_input(u'是否只爬取未爬过的新记录(y/n):'.encode(u'gb2312'))
+    if input_whether_to_read_last_max_id != 'y' and input_whether_to_read_last_max_id != 'n':
+        print u'必须输入 y 或 n '.encode(u'gb2312')
+        return
+
+    if input_whether_to_read_last_max_id == 'y':
+        last_max_id = read_last_max_id(last_max_id_file)
+        if last_max_id:
+            print (u'此次不爬取 id <= %d 的记录' % last_max_id).encode(u'gb2312')
+        else:
+            print u'找不到上次爬取的记录，此次将爬取全部记录'.encode(u'gb2312')
 
     # 获取总页数，填充任务队列
     url = u'https://www.itjuzi.com/investevents'
     doc = get_doc(url)
     if doc is None:
-        raise Exception(u'无法访问: %s' % url)
-    total_page = int(doc.cssselect('a[data-ci-pagination-page]')[-1].get(u'data-ci-pagination-page'))
+        raise Exception((u'无法访问: %s' % url).encode(u'gb2312'))
+    total_page = int(doc.cssselect(u'a[data-ci-pagination-page]')[-1].get(u'data-ci-pagination-page'))
     for i in range(total_page):
         task_queue.put(Task(page=i+1))
 
@@ -172,8 +221,18 @@ def main():
     while threading.activeCount() > 1:
         time.sleep(1)
 
-    # 保存数据到excel
-    save_data_to_excel(data, output_file)
+    # 保存数据
+    cur_max_id = None
+    if 1 in data and len(data[1]) > 0:
+        cur_max_id = data[1][0][u'id']
+        write_last_max_id(last_max_id_file, cur_max_id)
+
+    if cur_max_id:
+        output_file = u'./itjuzi-%s.xlsx' % cur_max_id
+        save_data_to_excel(data, output_file)
+        print (u'数据保存在%s' % os.path.abspath(output_file)).encode('gb2312')
+    else:
+        print u'未爬取到任何数据'.encode(u'gb2312')
 
 if __name__ == '__main__':
     main()

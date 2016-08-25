@@ -65,10 +65,8 @@ class WorkerThread(threading.Thread):
 
     def log(self, msg):
         sys.stdout.write(
-            (u"%s%s\n" %
-             (u"[线程#%s]" %
-              self.id,
-              msg)).encode('utf-8'))
+            (u"[线程#%s]%s\n" %
+              (self.id, msg)).encode('utf-8'))
 
     def get(self, url, try_times=3):
         global session
@@ -111,7 +109,7 @@ class WorkerThread(threading.Thread):
         global directory
         filename = os.path.join(directory, '%s.json' % task.cert.encode('utf-8'))
 
-        # 数据文件存在，直接跳过
+        # 数据文件存在，且大于1KB，则略过
         if os.path.exists(filename):
             size = os.path.getsize(filename)
             if size > 1024:
@@ -179,9 +177,10 @@ class WorkerThread(threading.Thread):
                 if 'redo' not in do_url:
                     # 开始考试
                     pay_paper_url = 'http://wx.233.com/tiku/Exam/PayPaper/'
-                    body = self.post(pay_paper_url, {'paperId': paper_id, 'modelStr': 'mk', 'exam': exam})
+                    self.post(pay_paper_url, {'paperId': paper_id, 'modelStr': 'mk', 'exam': exam})
                     do_url = 'http://wx.233.com/tiku/exam/do/%s' % paper_id
 
+                # 进入考试页面, 获取rule_id, 用于获取答案
                 body = self.get(do_url)
                 doc = html.fromstring(body)
                 page_rules_a = doc.cssselect('#page-rules > a')
@@ -232,7 +231,12 @@ class WorkerThread(threading.Thread):
                     # 大章
                     chapter_name = tr.cssselect('a')[0].text.strip()
                     chapter_questions = self.fetch_chapter_or_section_questions(chapter_id, exam_num) if exam_num > 0 else []
-                    chapters[chapter_id]= {'chapter_id': chapter_id, 'chapter_name': chapter_name, 'chapter_questions': chapter_questions, 'sections': []}
+                    chapters[chapter_id]= {
+                        'chapter_id': chapter_id,
+                        'chapter_name': chapter_name,
+                        'chapter_questions': chapter_questions,
+                        'sections': []
+                    }
                     self.log(u'科目: %s 大章: %s题 题数: %s' % (subject, chapter_name, len(chapter_questions)))
                 else:
                     # 小节
