@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# -*- coding:gb2312 -*-
+# -*- coding:utf-8 -*-
 
 import os
 import json
@@ -10,6 +10,7 @@ import time
 import openpyxl
 import Queue
 import traceback
+import re
 from lxml import html
 
 data = {}
@@ -25,7 +26,7 @@ def get(url, try_times=3):
         try_times -= 1
         try:
             r = session.get(url, timeout=30)
-            return r.content.decode('gb2312')
+            return r.content.decode('utf-8')
         except Exception as e1:
             e = e1
     raise e
@@ -50,6 +51,10 @@ def save_data_to_excel(data, filename):
         u'轮次',
         u'行业分类',
         u'金额',
+        u'成立时间',
+        u'公司简介',
+        u'所属行业',
+        u'详细地址',
         u'URL',
         u'案例介绍',
     ]
@@ -150,28 +155,55 @@ class WorkerThread(threading.Thread):
             max_page = task.page
 
         for tr in trs:
-            detail_url = u'http://zdb.pedaily.cn' + tr.cssselect(u'td.td6 > a')[0].get('href')
+            company_url = tr.cssselect(u'td.td1 > a')[0].get(u'href')
+            detail_url = u'http://zdb.pedaily.cn' + tr.cssselect(u'td.td6 > a')[0].get(u'href')
             cur_id = detail_url.split(u'/')[-2][4:]
             cur_id = int(cur_id)
             if last_max_id and cur_id <= last_max_id:
                 max_page = task.page
                 break
 
-            doc = get_doc(detail_url)
-            if doc is None:
+            company_doc = get_doc(company_url)
+            if company_doc is None:
+                self.log(u'failed to get company: %s' % company_url)
+                continue
+
+            detail_doc = get_doc(detail_url)
+            if detail_doc is None:
                 self.log(u'failed to get detail: %s' % detail_url)
                 continue
 
+            company_info = {}
+            lis = company_doc.cssselect(u'body > div.content > div > div.box-fix-c > div.news-show.company-show > div.box-caption > ul > li')
+            for li in lis:
+                grp = re.search(u'([^\s]*)：([^\s]*)', li.text_content())
+                if grp:
+                    company_info[grp.group(1)] = grp.group(2)
+
+            company_info_p = company_doc.cssselect(u'body > div.content > div > div.box-fix-c > div.news-show.company-show > div.box-content > p:nth-child(3)')
+            if len(company_info_p) > 0:
+                company_info[u'公司简介'] = company_info_p[0].text_content()
+
+            contact_p = company_doc.cssselect(u'body > div.content > div > div.box-fix-c > div.news-show.company-show > div:nth-child(4) > p')
+            if len(contact_p) > 0:
+                grp = re.search(u'详细地址：([^\s]*)', contact_p[0].text_content())
+                if grp:
+                    company_info[u'详细地址'] = grp.group(1)
+
             entry = {
                 u'id':          cur_id,
-                u'投资时间':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(1)')[0].text_content()[5:],
-                u'投资方':      doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(2)')[0].text_content()[6:],
-                u'受资方':      doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(3)')[0].text_content()[6:],
-                u'轮次':        doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(4)')[0].text_content()[5:],
-                u'行业分类':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(5) > a:nth-child(2)')[0].text_content(),
-                u'金额':        doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(6)')[0].text_content()[5:],
+                u'投资时间':    detail_doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(1)')[0].text_content()[5:],
+                u'投资方':      detail_doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(2)')[0].text_content()[6:],
+                u'受资方':      detail_doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(3)')[0].text_content()[6:],
+                u'轮次':        detail_doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(4)')[0].text_content()[5:],
+                u'行业分类':    detail_doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(5) > a:nth-child(2)')[0].text_content(),
+                u'金额':        detail_doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(6)')[0].text_content()[5:],
+                u'成立时间':    company_info[u'成立时间'] if u'成立时间' in company_info else u'',
+                u'公司简介':    company_info[u'公司简介'] if u'公司简介' in company_info else u'',
+                u'所属行业':    company_info[u'所属行业'] if u'所属行业' in company_info else u'',
+                u'详细地址':    company_info[u'详细地址'] if u'详细地址' in company_info else u'',
                 u'URL':         detail_url,
-                u'案例介绍':    doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(8)')[0].text_content().strip(),
+                u'案例介绍':    detail_doc.cssselect(u'body > div.content > div > div.box-fix-c.index-focus > div.news-show > div > :nth-child(8)')[0].text_content().strip(),
             }
             data[task.page].append(entry)
         self.log(u'第%d页 %d条记录' % (task.page, len(data[task.page])))
@@ -187,13 +219,13 @@ def main():
     last_max_id_file = u'./pedaily.last_max_id.txt'
 
     # 交互式输入参数
-    input_thread_count = raw_input(u'请输入线程数目(建议20~50):'.encode(u'gb2312'))
+    input_thread_count = raw_input(u'请输入线程数目(建议20~50):'.encode(u'gb2312')).strip()
     thread_count = int(input_thread_count)
     if thread_count <= 0:
         print u'线程数目必须大于0'.encode(u'gb2312')
         return
 
-    input_whether_to_read_last_max_id = raw_input(u'是否只爬取未爬过的新记录(y/n):'.encode(u'gb2312'))
+    input_whether_to_read_last_max_id = raw_input(u'是否只爬取未爬过的新记录(y/n):'.encode(u'gb2312')).strip()
     if input_whether_to_read_last_max_id != 'y' and input_whether_to_read_last_max_id != 'n':
         print u'必须输入 y 或 n '.encode(u'gb2312')
         return
