@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# -*- coding:gb2312 -*-
+# -*- coding:utf-8 -*-
 
 import os
 import json
@@ -27,7 +27,7 @@ def get(url, try_times=3):
         try_times -= 1
         try:
             r = session.get(url, headers=headers, timeout=30)
-            return r.content.decode('gb2312')
+            return r.content.decode('utf-8')
         except Exception as e1:
             e = e1
     raise e
@@ -57,6 +57,7 @@ def save_data_to_excel(data, filename):
         u'股权占比',
         u'投资方',
         u'公司简介',
+        u'成立时间',
         u'URL',
     ]
     columns_cnt = len(columns)
@@ -153,21 +154,26 @@ class WorkerThread(threading.Thread):
                 break
 
             detail_url = li.cssselect(u'p.title > a')[0].get('href')
-            doc = get_doc(detail_url)
-            region = re.search(u'([^\s]*)\s*·\s*([^\s]*)', doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > span:nth-child(7)')[0].text_content().strip())
+            detail_doc = get_doc(detail_url)
+            region = re.search(u'([^\s]*)\s*·\s*([^\s]*)', detail_doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > span')[-1].text_content().strip())
+
+            company_url = detail_doc.cssselect(u'body > div.thewrap > div.boxed > div.main > div:nth-child(1) > div > div.block > div.block-inc-fina > table > tr > td:nth-child(2) > a.name')[0].get(u'href')
+            company_doc = get_doc(company_url)
+
             entry = {
                 u'id':          cur_id,
                 u'时间':        li.cssselect(u'i')[0].cssselect(u'span')[0].text_content().strip(),
                 u'公司':        li.cssselect(u'p.title > a > span')[0].text_content().strip(),
-                u'一级行业':    doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > a:nth-child(3)')[0].text_content().strip(),
-                u'二级行业':    doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > span:nth-child(5)')[0].text_content().strip(),
+                u'一级行业':    detail_doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > a:nth-child(3)')[0].text_content().strip(),
+                u'二级行业':    detail_doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > span:nth-child(5)')[0].text_content().strip(),
                 u'一级地区':    region.group(1),
                 u'二级地区':    region.group(2),
                 u'轮次':        li.cssselect(u'i')[3].cssselect(u'span')[0].text_content().strip(),
                 u'融资金额':    li.cssselect(u'i')[4].text_content().strip(),
-                u'股权占比':    doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(5) > span.per')[0].text_content().strip(),
+                u'股权占比':    detail_doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(5) > span.per')[0].text_content().strip(),
                 u'投资方':      re.sub(u'\s+', u' / ', li.cssselect(u'i')[5].cssselect(u'span')[0].text_content().strip()),
-                u'公司简介':    doc.cssselect(u'body > div.thewrap > div.boxed > div.main > div:nth-child(1) > div > div.block > div:nth-child(3) > p')[0].text_content().strip(),
+                u'公司简介':    detail_doc.cssselect(u'body > div.thewrap > div.boxed > div.main > div:nth-child(1) > div > div.block > div:nth-child(3) > p')[0].text_content().strip(),
+                u'成立时间':    company_doc.cssselect(u'body > div.thewrap > div:nth-child(5) > div.main > div.sec.ugc-block-item.bgpink > div.block-inc-info.on-edit-hide > div:nth-child(3) > div > div:nth-child(2) > span:nth-child(1)')[0].text_content()[5:],
                 u'URL':         li.cssselect(u'p.title > a')[0].get(u'href'),
             }
             data[task.page].append(entry)
@@ -183,13 +189,13 @@ def main():
     last_max_id_file = u'./itjuzi.last_max_id.txt'
 
     # 交互式输入参数
-    input_thread_count = raw_input(u'请输入线程数目(建议20~50):'.encode(u'gb2312'))
+    input_thread_count = raw_input(u'请输入线程数目(建议20~50):'.encode(u'gb2312')).strip()
     thread_count = int(input_thread_count)
     if thread_count <= 0:
         print u'线程数目必须大于0'.encode(u'gb2312')
         return
 
-    input_whether_to_read_last_max_id = raw_input(u'是否只爬取未爬过的新记录(y/n):'.encode(u'gb2312'))
+    input_whether_to_read_last_max_id = raw_input(u'是否只爬取未爬过的新记录(y/n):'.encode(u'gb2312')).strip()
     if input_whether_to_read_last_max_id != 'y' and input_whether_to_read_last_max_id != 'n':
         print u'必须输入 y 或 n '.encode(u'gb2312')
         return
