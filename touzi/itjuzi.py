@@ -14,19 +14,22 @@ import re
 from lxml import html
 
 data = {}
+proxies = None
 headers = {u'User-Agent': u'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36'}
 session = requests.Session()
 task_queue = Queue.Queue()
 last_max_id = None
 max_page = None
 
+
 def get(url, try_times=3):
     global session
+    global proxies
     e = None
     while try_times > 0:
         try_times -= 1
         try:
-            r = session.get(url, headers=headers, timeout=30)
+            r = session.get(url, headers=headers, timeout=30, proxies=proxies)
             return r.content.decode('utf-8')
         except Exception as e1:
             e = e1
@@ -39,6 +42,24 @@ def get_doc(url, try_times=3):
 def get_json(url, try_times=3):
     content = get(url, try_times)
     return json.loads(content) if content else None
+
+def auto_set_proxy():
+    global proxies
+    doc = get_doc(u'http://www.xicidaili.com/nn/')
+    trs = doc.cssselect(u'#ip_list > tr')[1:]
+    for tr in trs:
+        tds = tr.cssselect(u'td')
+        ip   = tds[1].text_content().strip()
+        port = tds[2].text_content().strip()
+        http_proxy = u'http://%s:%s' % (ip, port)
+        proxies = {u'http': http_proxy}
+        print (u'正在测试代理 %s...' % http_proxy).encode(u'gb2312')
+        try:
+            get(u'http://www.itjuzi.com/')
+            return http_proxy
+        except Exception:
+            pass
+    return None
 
 def save_data_to_excel(data, filename):
     """
@@ -173,7 +194,7 @@ class WorkerThread(threading.Thread):
                 u'股权占比':    detail_doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(5) > span.per')[0].text_content().strip(),
                 u'投资方':      re.sub(u'\s+', u' / ', li.cssselect(u'i')[5].cssselect(u'span')[0].text_content().strip()),
                 u'公司简介':    detail_doc.cssselect(u'body > div.thewrap > div.boxed > div.main > div:nth-child(1) > div > div.block > div:nth-child(3) > p')[0].text_content().strip(),
-                u'成立时间':    company_doc.cssselect(u'body > div.thewrap > div:nth-child(5) > div.main > div.sec.ugc-block-item.bgpink > div.block-inc-info.on-edit-hide > div:nth-child(3) > div > div:nth-child(2) > span:nth-child(1)')[0].text_content()[5:],
+                u'成立时间':    company_doc.cssselect(u'div.des-more > div:nth-child(2) > span:nth-child(1)')[0].text_content()[5:],
                 u'URL':         li.cssselect(u'p.title > a')[0].get(u'href'),
             }
             data[task.page].append(entry)
@@ -199,13 +220,23 @@ def main():
     if input_whether_to_read_last_max_id != 'y' and input_whether_to_read_last_max_id != 'n':
         print u'必须输入 y 或 n '.encode(u'gb2312')
         return
-
     if input_whether_to_read_last_max_id == 'y':
         last_max_id = read_last_max_id(last_max_id_file)
         if last_max_id:
             print (u'此次不爬取 id <= %d 的记录' % last_max_id).encode(u'gb2312')
         else:
             print u'找不到上次爬取的记录，此次将爬取全部记录'.encode(u'gb2312')
+
+    input_proxy = raw_input(u'是否使用代理进行爬取(y/n)'.encode(u'gb2312')).strip()
+    if input_proxy != 'y' and input_proxy != 'n':
+        print u'线程数目必须大于0'.encode(u'gb2312')
+        return
+    if input_proxy == 'y':
+        proxy = auto_set_proxy()
+        if proxy is None:
+            print u'没有可用的代理'.encode(u'gb2312')
+            return
+        print (u'使用代理: %s' % proxy).encode(u'gb2312')
 
     # 获取总页数，填充任务队列
     url = u'https://www.itjuzi.com/investevents'
