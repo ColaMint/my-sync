@@ -224,7 +224,7 @@ def main():
     last_max_id_file = u'./itjuzi.last_max_id.txt'
 
     # 交互式输入参数
-    input_thread_count = raw_input(u'请输入线程数目(建议20~50):'.encode(u'gb2312')).strip()
+    input_thread_count = raw_input(u'请输入线程数目(建议5~10):'.encode(u'gb2312')).strip()
     thread_count = int(input_thread_count)
     if thread_count <= 0:
         print u'线程数目必须大于0'.encode(u'gb2312')
@@ -250,7 +250,7 @@ def main():
         if proxy is None:
             print u'没有可用的代理'.encode(u'gb2312')
             return
-        print (u'使用代理: %s' % proxy).encode(u'gb2312')
+        print (u'使用代理 %s' % proxy).encode(u'gb2312')
 
     # 获取总页数，填充任务队列
     url = u'https://www.itjuzi.com/investevents'
