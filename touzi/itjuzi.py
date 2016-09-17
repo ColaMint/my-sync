@@ -163,6 +163,7 @@ class WorkerThread(threading.Thread):
         global last_max_id
 
         url = u'https://www.itjuzi.com/investevents?page=%d' % task.page
+        self.log(url)
         doc = get_doc(url)
 
         data[task.page] = []
@@ -176,10 +177,12 @@ class WorkerThread(threading.Thread):
                 break
 
             detail_url = li.cssselect(u'p.title > a')[0].get('href')
+            self.log(detail_url)
             detail_doc = get_doc(detail_url)
             region = re.search(u'([^\s]*)\s*·\s*([^\s]*)', detail_doc.cssselect(u'div.block-inc-fina > table > tr > td:nth-child(2) > span')[-1].text_content().strip())
 
             company_url = detail_doc.cssselect(u'body > div.thewrap > div.boxed > div.main > div:nth-child(1) > div > div.block > div.block-inc-fina > table > tr > td:nth-child(2) > a.name')[0].get(u'href')
+            self.log(company_url)
             company_doc = get_doc(company_url)
 
             entry = {
