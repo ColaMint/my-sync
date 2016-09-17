@@ -11,6 +11,7 @@ import openpyxl
 import Queue
 import traceback
 import re
+import random
 from lxml import html
 
 data = {}
@@ -47,7 +48,7 @@ def auto_set_proxy():
     global proxies
     doc = get_doc(u'http://www.xicidaili.com/nn/')
     trs = doc.cssselect(u'#ip_list > tr')[1:]
-    for tr in trs:
+    for tr in random.sample(trs, len(trs)):
         tds = tr.cssselect(u'td')
         ip   = tds[1].text_content().strip()
         port = tds[2].text_content().strip()
