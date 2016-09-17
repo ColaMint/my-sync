@@ -46,18 +46,28 @@ def get_json(url, try_times=3):
 
 def auto_set_proxy():
     global proxies
-    doc = get_doc(u'http://www.xicidaili.com/nn/')
-    trs = doc.cssselect(u'#ip_list > tr')[1:]
-    for tr in random.sample(trs, len(trs)):
-        tds = tr.cssselect(u'td')
-        ip   = tds[1].text_content().strip()
-        port = tds[2].text_content().strip()
-        http_proxy = u'http://%s:%s' % (ip, port)
-        proxies = {u'http': http_proxy}
-        print (u'正在测试代理 %s...' % http_proxy).encode(u'gb2312')
+    https_proxies = []
+
+    for p in range(1, 4):
+        url = u'http://www.xicidaili.com/nt/%d' % p
+        doc = get_doc(url)
+        trs = doc.cssselect(u'#ip_list > tr')[1:]
+        for tr in trs:
+            tds = tr.cssselect(u'td')
+            protocol = tds[5].text_content().strip()
+            if protocol != 'HTTPS':
+                continue
+            ip   = tds[1].text_content().strip()
+            port = tds[2].text_content().strip()
+            https_proxy = u'http://%s:%s' % (ip, port)
+            https_proxies.append(https_proxy)
+
+    for https_proxy in https_proxies:
+        print (u'正在测试代理 %s...' % https_proxy).encode(u'gb2312')
+        proxies = {u'https': https_proxy}
         try:
-            get(u'http://www.itjuzi.com/')
-            return http_proxy
+            get(u'https://www.itjuzi.com/')
+            return https_proxy
         except Exception:
             pass
     return None
